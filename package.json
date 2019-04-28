@@ -1,0 +1,12 @@
+{
+  "name": "long-polling-chat",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "npx nodemon index.js",
+    "debug": "npx nodemon --inspect-brk index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

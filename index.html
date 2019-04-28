@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Long Polling Chat</title>
+  <style>
+    :root {
+      font: 100%/1.5 sans-serif;
+      color: #484848;
+      background: #f6f6f6;
+    }
+
+    .view:not(.active) {
+      display: none;
+    }
+
+    body {
+      margin: 0 auto;
+      max-width: 480px;
+      padding: 0 1.5rem;
+    }
+
+    input,
+    textarea {
+      box-sizing: border-box;
+      display: block;
+      min-width: 0;
+      padding: 0.25em 1em;
+      border: 1px solid #e4e4e4;
+      font: inherit;
+      border-radius: 4px;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 0.5em 1.25em;
+      font: inherit;
+      border: 0;
+      color: #fff;
+      background: #39f;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+      .btn:hover {
+        box-shadow: 0 0 0 9in hsla(0, 0%, 100%, 0.1) inset;
+      }
+
+    .field {
+      margin-bottom: 1em;
+      display: block;
+    }
+
+      .field span {
+        display: block;
+      }
+
+      .field input {
+        width: 100%;
+      }
+
+    .widget {
+      margin: 1.5em 0;
+      box-sizing: border-box;
+      padding: 1.5em;
+      border: 1px solid #e4e4e4;
+      background: #fff;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.075);
+    }
+
+    .message-form {
+      position: sticky;
+      bottom: 0;
+      display: flex;
+      align-items: flex-start;
+    }
+
+      .message-form textarea {
+        flex: 1 1 0%;
+        min-width: 0;
+        min-height: 100px;
+      }
+
+      .message-form button {
+        margin-left: 1.5rem;
+        flex: 0 0 auto;
+      }
+
+        form[name="login"] .btn {
+          margin: auto;
+          display: block;
+          width: max-content;
+        }
+
+      .message {
+        display: flex;
+        align-items: flex-start;
+      }
+
+        .message + .message {
+          margin-top: 0.75em;
+        }
+
+        .message img {
+          margin-right: 1rem;
+          flex: 0 0 auto;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          object-fit: cover;
+          object-position: 50% 50%;
+          background: #eee;
+        }
+
+        .message .content {
+          flex: 1 1 0%;
+          min-width: 0;
+        }
+
+        .message .username {
+          font-weight: 700;
+        }
+
+        .message .text {
+          line-height: 1.4;
+        }
+    </style>
+  </head>
+  <body>
+
+    <div id="login" class="view active">
+      <form class="widget" name="login">
+        <label class="field">
+          <span>Username</span>
+          <input type="text" name="username" autofocus />
+      </label>
+      <label class="field">
+        <span>Avatar URL</span>
+        <input type="url" name="avatar" />
+      </label>
+      <button class="btn" type="submit">Enter chat</button>
+    </form>
+  </div>
+
+  <div id="chat" class="view">
+    <h3>Chat history</h3>
+    <ul class="widget" id="messages"></ul>
+
+    <form class="widget message-form" action="/publish" method="POST" name="chat-form">
+      <textarea name="message" autofocus></textarea>
+      <button class="btn" type="submit">send</button>
+    </form>
+  </div>
+
+  <script>
+    const loginView = document.getElementById('login');
+    const chatView = document.getElementById('chat');
+
+    const loginForm = document.forms['login'];
+    const usernameField = loginForm.elements['username'];
+    const avatarField = loginForm.elements['avatar'];
+
+    const messageForm = document.forms['chat-form'];
+    const messageField = messageForm.elements['message'];
+    const messages = document.getElementById('messages');
+
+    function createElement(tagName, attrs) {
+      const element = document.createElement(tagName);
+      Object.assign(element, attrs);
+      return element;
+    }
+
+    loginForm.onsubmit = function(event) {
+      event.preventDefault();
+
+      usernameField.type = 'hidden';
+      avatarField.type = 'hidden';
+      usernameField.removeAttribute('autofocus');
+      messageForm.appendChild(usernameField);
+      messageForm.appendChild(avatarField);
+      loginView.classList.toggle('active');
+      chatView.classList.toggle('active');
+      messageField.focus();
+    }
+
+    messageForm.onsubmit = function(event) {
+      event.preventDefault();
+      const targetForm = event.target;
+      const xhr = new XMLHttpRequest();
+      xhr.open(targetForm.method, targetForm.action);
+      xhr.setRequestHeader('Content-Type', 'application/json; charset=utf-8');
+      xhr.send(JSON.stringify({
+        message: messageField.value,
+        username: usernameField.value,
+        avatar: avatarField.value
+      }));
+      messageField.value = '';
+      messageField.focus();
+    }
+
+    function onSubscribe(data) {
+      const message = createElement('li', {
+        className: 'message',
+        innerHTML: `
+          <img />
+          <div class="content">
+            <div class="username"></div>
+            <div class="text"></div>
+          </div>
+        `
+      });
+
+      messages.appendChild(message);
+
+      const image = message.querySelector('img');
+      image.src = data.avatar;
+      image.alt = data.username;
+      const username = message.querySelector('.username');
+      username.textContent = data.username;
+      const text = message.querySelector('.text');
+      text.textContent = data.message;
+    }
+
+    function subscribe(onSuccess) {
+      const xhr = new XMLHttpRequest();
+
+      xhr.open('POST', `/subscribe`);
+
+      xhr.onload = function() {
+        if(xhr.status != 200) return this.onerror();
+        try {
+          const data = JSON.parse(this.responseText);
+          onSuccess(data);
+          subscribe(onSuccess);
+        } catch (error) {
+          this.onerror(error);
+        }
+      };
+
+      xhr.onerror = xhr.onabort = function() {
+        setTimeout(subscribe, 1000, onSuccess);
+      };
+
+      xhr.send();
+    }
+
+    subscribe(onSubscribe);
+  </script>
+</body>
+</html>
