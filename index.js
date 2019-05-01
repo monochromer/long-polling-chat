@@ -2,83 +2,66 @@ const fs = require('fs');
 const path = require('path');
 const { Server, STATUS_CODES } = require('http');
 
+const Koa = require('koa');
+const Router = require('koa-router');
+const bodyParser = require('koa-bodyparser');
+const koaStatic = require('koa-static');
+
 const PORT = process.env.PORT || 3000;
 const server = new Server();
+const app = new Koa();
+const router = new Router();
 
 const clients = new Set();
 
-function onRequest(req, res) {
-  const route = `${req.method} ${req.url}`;
-
-  switch (route) {
-    case 'GET /':
-      const fileStream = fs.createReadStream(path.join(__dirname, 'index.html'));
-      fileStream
-        .on('open', () => {
-          res.setHeader('Content-Type', 'text/html');
-        })
-        .on('error', error => {
-          res.statusCode = 500;
-          res.end(STATUS_CODES[500])
-        })
-        .pipe(res);
-      req.on('close', () => {
-        fileStream.destroy();
-      });
-      break;
-
-    case 'POST /subscribe':
-      // res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-      clients.add(res);
-      res.on('close', () => {
-        clients.delete(res);
-      });
-      break;
-
-    case 'POST /publish':
-      let body = '';
-      req.setEncoding('utf8');
-      req
-        .on('error', (err) => {
-          res.statusCode = 500;
-          res.end(STATUS_CODES[500]);
-        })
-        .on('data', chunk => {
-          body += chunk;
-          if (body.length > 1000) {
-            res.statusCode = 413;
-            res.end(STATUS_CODES[413]);
-          }
-        })
-        .on('end', () => {
-          try {
-            // body = JSON.parse(body);
-          } catch (error) {
-            res.statusCode = 400;
-            res.end(STATUS_CODES[400]);
-            return;
-          }
-          clients.forEach(clientResponse => {
-            clientResponse.setHeader('Content-Type', 'application/json; charset=utf-8')
-            // clientResponse.end(body.message.toString());
-            clientResponse.end(body);
-          });
-          clients.clear();
-          res.statusCode = 200;
-          res.setHeader('Content-Type', 'plain/text');
-          res.end(STATUS_CODES[200]);
-        })
-      break;
-
-    default:
-      res.statusCode = 404;
-      res.end(STATUS_CODES[404]);
-      break;
+async function errorMiddleware(ctx, next) {
+  try {
+    await next();
+  } catch(e) {
+    if (e.status) {
+      ctx.body = e.message;
+      ctx.status = e.status;
+    } else {
+      ctx.body = STATUS_CODES[500];
+      ctx.status = 500;
+      console.error(e.message, e.stack);
+    }
   }
-};
+}
+
+router
+  .post('/subscribe', async (ctx, next) => {
+    const message = await new Promise((resolve) => {
+      clients.add(resolve);
+      ctx.res.on('close', () => {
+        clients.delete(resolve);
+        resolve();
+      });
+    });
+    ctx.body = message;
+  })
+  .post('/publish', async (ctx, next) => {
+    const message = ctx.request.body;
+
+    if (!message) {
+      ctx.throw(404);
+    }
+
+    clients.forEach(resolve => resolve(message));
+    clients.clear();
+    ctx.status = 200;
+    ctx.body = STATUS_CODES[200];
+  });
+
+app
+  .use(koaStatic(path.join(__dirname, 'public')))
+  .use(bodyParser({ jsonLimit: '56kb' }))
+  .use(errorMiddleware)
+  .use(router.routes())
+  .use(router.allowedMethods());
 
 server
-  .on('request', onRequest)
+  .on('request', app.callback())
   .on('error', console.error)
   .listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
