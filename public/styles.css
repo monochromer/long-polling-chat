@@ -1,0 +1,123 @@
+:root {
+  font: 100%/1.5 sans-serif;
+  color: #484848;
+  background: #f6f6f6;
+}
+
+.view:not(.active) {
+  display: none;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 480px;
+  padding: 0 1.5rem;
+}
+
+input,
+textarea {
+  margin: 0;
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  padding: 0.25em 1em;
+  border: 1px solid #e4e4e4;
+  font: inherit;
+  border-radius: 4px;
+}
+
+.btn {
+  display: inline-block;
+  padding: 0.5em 1.25em;
+  font: inherit;
+  border: 0;
+  color: #fff;
+  background: #39f;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+  .btn:hover {
+    box-shadow: 0 0 0 9in hsla(0, 0%, 100%, 0.1) inset;
+  }
+
+.field {
+  margin-bottom: 1em;
+  display: block;
+}
+
+  .field span {
+    margin-bottom: 0.25em;
+    display: block;
+  }
+
+  .field input {
+    width: 100%;
+  }
+
+.widget {
+  margin: 1.5em 0;
+  box-sizing: border-box;
+  padding: 1.5em;
+  border: 1px solid #e4e4e4;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.075);
+}
+
+.message-form {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+  .message-form textarea {
+    flex: 1 1 0%;
+    min-width: 0;
+    min-height: 100px;
+  }
+
+  .message-form button {
+    margin-left: 1.5rem;
+    flex: 0 0 auto;
+  }
+
+    form[name="login"] .btn {
+      margin: auto;
+      display: block;
+      width: max-content;
+    }
+
+  .message {
+    display: flex;
+    align-items: flex-start;
+  }
+
+    .message + .message {
+      margin-top: 0.75em;
+    }
+
+    .message img {
+      margin-right: 1rem;
+      flex: 0 0 auto;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      object-fit: cover;
+      object-position: 50% 50%;
+      background: #eee;
+    }
+
+    .message .content {
+      flex: 1 1 0%;
+      min-width: 0;
+    }
+
+    .message .username {
+      font-weight: 700;
+    }
+
+    .message .text {
+      line-height: 1.4;
+    }
