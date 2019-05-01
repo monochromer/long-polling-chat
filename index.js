@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const EventEmitter = require('events');
 const { Server, STATUS_CODES } = require('http');
 
 const Koa = require('koa');
@@ -12,7 +13,7 @@ const server = new Server();
 const app = new Koa();
 const router = new Router();
 
-const clients = new Set();
+const chat = new EventEmitter();
 
 async function errorMiddleware(ctx, next) {
   try {
@@ -31,14 +32,19 @@ async function errorMiddleware(ctx, next) {
 
 router
   .post('/subscribe', async (ctx, next) => {
-    const message = await new Promise((resolve) => {
-      clients.add(resolve);
-      ctx.res.on('close', () => {
-        clients.delete(resolve);
+    await new Promise((resolve) => {
+      function onMessage(message) {
+        ctx.body = message;
         resolve();
-      });
+      }
+
+      chat.once('message', onMessage);
+
+      ctx.res.on('close', () => {
+        chat.off('message', onMessage);
+        resolve();
+      })
     });
-    ctx.body = message;
   })
   .post('/publish', async (ctx, next) => {
     const message = ctx.request.body;
@@ -47,8 +53,8 @@ router
       ctx.throw(404);
     }
 
-    clients.forEach(resolve => resolve(message));
-    clients.clear();
+    chat.emit('message', message);
+
     ctx.status = 200;
     ctx.body = STATUS_CODES[200];
   });
