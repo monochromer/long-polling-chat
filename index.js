@@ -32,10 +32,9 @@ async function errorMiddleware(ctx, next) {
 
 router
   .post('/subscribe', async (ctx, next) => {
-    await new Promise((resolve) => {
-      function onMessage(message) {
-        ctx.body = message;
-        resolve();
+    const message = await new Promise((resolve) => {
+      function onMessage(message) {        
+        resolve(message);
       }
 
       chat.once('message', onMessage);
@@ -45,6 +44,8 @@ router
         resolve();
       })
     });
+  
+    ctx.body = message;
   })
   .post('/publish', async (ctx, next) => {
     const message = ctx.request.body;
