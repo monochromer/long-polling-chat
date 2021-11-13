@@ -1,84 +1,109 @@
-const fs = require('fs');
-const path = require('path');
-const { Server, STATUS_CODES } = require('http');
+const { randomUUID } = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const { STATUS_CODES } = require('node:http');
+const http2 = require('node:http2');
+const { constants: HTTP_CONSTANTS } = require('node:http2');
 
-const PORT = process.env.PORT || 3000;
-const server = new Server();
+const PORT = process.env.PORT || 8443;
+
+const server = http2.createSecureServer({
+  key: fs.readFileSync(process.env.KEY),
+  cert: fs.readFileSync(process.env.CERT)
+});;
 
 const clients = new Set();
 
-function onRequest(req, res) {
-  const route = `${req.method} ${req.url}`;
+function onStream(stream, headers) {
+  const route = `${headers[HTTP_CONSTANTS.HTTP2_HEADER_METHOD]} ${headers[HTTP_CONSTANTS.HTTP2_HEADER_PATH]}`;
 
   switch (route) {
     case 'GET /':
       const fileStream = fs.createReadStream(path.join(__dirname, 'index.html'));
       fileStream
         .on('open', () => {
-          res.setHeader('Content-Type', 'text/html');
+          stream.respond({
+            [HTTP_CONSTANTS.HTTP2_HEADER_CONTENT_TYPE]: 'text/html; charset=utf-8',
+            [HTTP_CONSTANTS.HTTP2_HEADER_STATUS]: HTTP_CONSTANTS.HTTP_STATUS_OK
+          })
         })
         .on('error', error => {
-          res.statusCode = 500;
-          res.end(STATUS_CODES[500])
+          stream.respond({
+            [HTTP_CONSTANTS.HTTP2_HEADER_STATUS]: HTTP_CONSTANTS.HTTP_STATUS_INTERNAL_SERVER_ERROR
+          })
+          stream.end(STATUS_CODES[HTTP_CONSTANTS.HTTP_STATUS_INTERNAL_SERVER_ERROR])
         })
-        .pipe(res);
-      req.on('close', () => {
+        .pipe(stream);
+
+      stream.on('aborted', () => {
         fileStream.destroy();
-      });
+      })
+      stream.on('close', () => {
+        fileStream.destroy();
+      })
       break;
 
-    case 'POST /subscribe':
-      // res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-      clients.add(res);
-      res.on('close', () => {
-        clients.delete(res);
-      });
+    case 'GET /subscribe':
+      clients.add(stream);
+      stream.respond({
+        [HTTP_CONSTANTS.HTTP2_HEADER_CONTENT_TYPE]: 'text/event-stream',
+        [HTTP_CONSTANTS.HTTP2_HEADER_CACHE_CONTROL]: 'no-cache',
+      })
+      stream.on('aborted', () => {
+        clients.delete(stream);
+      })
+      stream.on('close', () => {
+        clients.delete(stream);
+      })
       break;
 
     case 'POST /publish':
       let body = '';
-      req.setEncoding('utf8');
-      req
+      stream.setEncoding('utf8');
+      stream
         .on('error', (err) => {
-          res.statusCode = 500;
-          res.end(STATUS_CODES[500]);
+          stream.respond({
+            [HTTP_CONSTANTS.HTTP2_HEADER_STATUS]: HTTP_CONSTANTS.HTTP_STATUS_INTERNAL_SERVER_ERROR
+          })
+          stream.end(STATUS_CODES[HTTP_CONSTANTS.HTTP_STATUS_INTERNAL_SERVER_ERROR])
         })
         .on('data', chunk => {
           body += chunk;
           if (body.length > 1000) {
-            res.statusCode = 413;
-            res.end(STATUS_CODES[413]);
+            stream.respond({
+              [HTTP_CONSTANTS.HTTP2_HEADER_STATUS]: HTTP_CONSTANTS.HTTP_STATUS_PAYLOAD_TOO_LARGE
+            })
+            stream.end(STATUS_CODES[HTTP_CONSTANTS.HTTP_STATUS_PAYLOAD_TOO_LARGE])
           }
         })
         .on('end', () => {
-          try {
-            // body = JSON.parse(body);
-          } catch (error) {
-            res.statusCode = 400;
-            res.end(STATUS_CODES[400]);
-            return;
-          }
-          clients.forEach(clientResponse => {
-            clientResponse.setHeader('Content-Type', 'application/json; charset=utf-8')
-            // clientResponse.end(body.message.toString());
-            clientResponse.end(body);
+          clients.forEach(client => {
+            const data = [
+              `data: ${body}`,
+              `id: ${randomUUID()}`,
+              '\n'
+            ].join('\n');
+            client.write(data);
           });
-          clients.clear();
-          res.statusCode = 200;
-          res.setHeader('Content-Type', 'plain/text');
-          res.end(STATUS_CODES[200]);
+          stream.respond({
+            [HTTP_CONSTANTS.HTTP2_HEADER_STATUS]: HTTP_CONSTANTS.HTTP_STATUS_OK
+          })
+          stream.end(STATUS_CODES[HTTP_CONSTANTS.HTTP_STATUS_OK])
+          return;
         })
       break;
 
     default:
-      res.statusCode = 404;
-      res.end(STATUS_CODES[404]);
+      stream.respond({
+        [HTTP_CONSTANTS.HTTP2_HEADER_STATUS]: HTTP_CONSTANTS.HTTP_STATUS_NOT_FOUND
+      })
+      stream.end(STATUS_CODES[HTTP_CONSTANTS.HTTP_STATUS_NOT_FOUND]);
       break;
   }
 };
 
 server
-  .on('request', onRequest)
+  .on('stream', onStream)
   .on('error', console.error)
   .listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);

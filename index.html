@@ -169,6 +169,8 @@
     const messageField = messageForm.elements['message'];
     const messages = document.getElementById('messages');
 
+    const eventSource = new EventSource('/subscribe');
+
     function createElement(tagName, attrs) {
       const element = document.createElement(tagName);
       Object.assign(element, attrs);
@@ -226,30 +228,10 @@
       text.textContent = data.message;
     }
 
-    function subscribe(onSuccess) {
-      const xhr = new XMLHttpRequest();
-
-      xhr.open('POST', `/subscribe`);
-
-      xhr.onload = function() {
-        if(xhr.status != 200) return this.onerror();
-        try {
-          const data = JSON.parse(this.responseText);
-          onSuccess(data);
-          subscribe(onSuccess);
-        } catch (error) {
-          this.onerror(error);
-        }
-      };
-
-      xhr.onerror = xhr.onabort = function() {
-        setTimeout(subscribe, 1000, onSuccess);
-      };
-
-      xhr.send();
+    eventSource.onmessage = event => {
+      console.log(event.lastEventId);
+      onSubscribe(JSON.parse(event.data));
     }
-
-    subscribe(onSubscribe);
   </script>
 </body>
 </html>
