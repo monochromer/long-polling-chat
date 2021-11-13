@@ -228,10 +228,11 @@
       text.textContent = data.message;
     }
 
-    eventSource.onmessage = event => {
-      console.log(event.lastEventId);
+    function onMessage(event) {
       onSubscribe(JSON.parse(event.data));
     }
+
+    eventSource.addEventListener('message', onMessage)
   </script>
 </body>
 </html>
