@@ -10,10 +10,12 @@ const PORT = process.env.PORT || 8443;
 const server = http2.createSecureServer({
   key: fs.readFileSync(process.env.KEY),
   cert: fs.readFileSync(process.env.CERT)
-});;
+});
 
+/**@type {Set<http2.ServerHttp2Stream>} */
 const clients = new Set();
 
+/**@type {(stream: http2.ServerHttp2Stream, headers: http2.IncomingHttpHeaders, flags: number) => void} */
 function onStream(stream, headers) {
   const route = `${headers[HTTP_CONSTANTS.HTTP2_HEADER_METHOD]} ${headers[HTTP_CONSTANTS.HTTP2_HEADER_PATH]}`;
 
